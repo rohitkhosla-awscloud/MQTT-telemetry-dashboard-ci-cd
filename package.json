@@ -1,0 +1,14 @@
+{
+    "name": "mqtt-telemetry-dashboard",
+    "version": "1.0.0",
+    "description": "Real-time Node.js MQTT telemetry dashboard with WebSockets",
+    "main": "app.js",
+    "scripts": {
+      "start": "node app.js"
+    },
+    "dependencies": {
+      "express": "^4.19.2",
+      "mqtt": "^5.5.0",
+      "socket.io": "^4.7.5"
+    }
+  }

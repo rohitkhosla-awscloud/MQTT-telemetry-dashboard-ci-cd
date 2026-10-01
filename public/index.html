@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live MQTT Telemetry Dashboard</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; padding-bottom: 16px; margin-bottom: 24px; }
+    .badge { background: #059669; color: white; padding: 4px 12px; border-radius: 9999px; font-size: 13px; font-weight: 600; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1e293b; border-radius: 8px; padding: 20px; border: 1px solid #334155; }
+    .card h3 { margin: 0 0 8px 0; font-size: 14px; color: #94a3b8; font-weight: 500; }
+    .card .val { font-size: 32px; font-weight: 700; color: #38bdf8; }
+    .card .sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+    .chart-box { background: #1e293b; border-radius: 8px; padding: 20px; border: 1px solid #334155; height: 350px; }
+    .log-box { margin-top: 24px; background: #020617; border-radius: 8px; padding: 16px; border: 1px solid #334155; font-family: monospace; font-size: 12px; height: 120px; overflow-y: auto; color: #a5f3fc; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h2 style="margin: 0;">Live MQTT Telemetry Dashboard</h2>
+      <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;" id="broker-info">Connecting to server...</div>
+    </div>
+    <span class="badge" id="conn-badge">LIVE</span>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h3>TEMPERATURE</h3>
+      <div class="val" id="metric-temp">-- °C</div>
+      <div class="sub" id="time-temp">Awaiting signal...</div>
+    </div>
+    <div class="card">
+      <h3>HUMIDITY</h3>
+      <div class="val" id="metric-hum">-- %</div>
+      <div class="sub">Relative Humidity</div>
+    </div>
+    <div class="card">
+      <h3>VOLTAGE</h3>
+      <div class="val" id="metric-volt">-- V</div>
+      <div class="sub">Supply Line Bus</div>
+    </div>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="liveChart"></canvas>
+  </div>
+
+  <div class="log-box" id="mqtt-log">
+    <div>[System] Listening for incoming MQTT payloads...</div>
+  </div>
+
+  <script>
+    const socket = io();
+    const logBox = document.getElementById('mqtt-log');
+
+    // Chart.js Setup
+    const ctx = document.getElementById('liveChart').getContext('2d');
+    const chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'Temperature (°C)',
+          data: [],
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.1)',
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#cbd5e1' } } },
+        scales: {
+          x: { ticks: { color: '#64748b' }, grid: { color: '#334155' } },
+          y: { ticks: { color: '#64748b' }, grid: { color: '#334155' } }
+        }
+      }
+    });
+
+    socket.on('status', (info) => {
+      document.getElementById('broker-info').innerText = `Broker: ${info.broker} | Topic: ${info.topic}`;
+    });
+
+    socket.on('sensor-update', (payload) => {
+      const { data, receivedAt } = payload;
+
+      // Extract telemetry values
+      const temp = data.temperature !== undefined ? data.temperature : (data.temp !== undefined ? data.temp : null);
+      const hum = data.humidity !== undefined ? data.humidity : null;
+      const volt = data.voltage !== undefined ? data.voltage : null;
+
+      if (temp !== null) {
+        document.getElementById('metric-temp').innerText = `${Number(temp).toFixed(1)} °C`;
+        document.getElementById('time-temp').innerText = `Updated at ${receivedAt}`;
+
+        // Update Live Chart (rolling window of 15 entries)
+        chart.data.labels.push(receivedAt);
+        chart.data.datasets[0].data.push(temp);
+        if (chart.data.labels.length > 15) {
+          chart.data.labels.shift();
+          chart.data.datasets[0].data.shift();
+        }
+        chart.update();
+      }
+
+      if (hum !== null) document.getElementById('metric-hum').innerText = `${Number(hum).toFixed(1)} %`;
+      if (volt !== null) document.getElementById('metric-volt').innerText = `${Number(volt).toFixed(2)} V`;
+
+      // Append Log
+      const logEntry = document.createElement('div');
+      logEntry.textContent = `[${receivedAt}] Payload: ${JSON.stringify(data)}`;
+      logBox.prepend(logEntry);
+    });
+  </script>
+</body>
+</html>
